@@ -94,110 +94,70 @@ Route.get("/cuentas/:id", async (ctx) => {
   };
 });
 
+// Ruta para deposito
+// trx se utiliza para identificar la transaccion, siendo necesario
+// para MySQL para poder crear el bloqueo utilizando forUpdate() en los query
 Route.post("/deposito", async (ctx) => {
   const { monto, cuenta_id } = ctx.request.body();
-
-  const trx = await Database.transaction()
+  const trx = await Database.transaction(); // transaccion
 
   try {
-    // Busco el usuario y pongo el lock usando forUpdate()
-    const cuenta = await Database
-      .from('cuentas')
-      .where('id', cuenta_id)
-      .useTransaction(trx)
-      .forUpdate()
-      .first();
-
-    if (cuenta !== null) { // Si existe la cuenta
-      // cuenta en realidad no modifica nada, no se le puede hacer save()
-      // porque fue el resultado de un select con los query que son
-      // distintos a los objetos del modelo de Lucid (Adonis JS ORM)
-      cuenta.saldo = cuenta.saldo + monto;
-
-      // Hago la actualizacion de saldo
-      await Database
-        .from('cuentas')
+    const cuenta = await Cuenta.query({ client: trx })
+        .forUpdate()
         .where('id', cuenta_id)
-        .useTransaction(trx)
-        .update('saldo', cuenta.saldo);
-    
-      // Ejecuto o commit de la transaccion
+        .first();
+    if (cuenta !== null) { // Si existe la cuenta
+      cuenta.saldo = cuenta.saldo + monto;
+      await trx.insertQuery()  // Insert de la transaccion
+        .table('transacciones')
+        .insert({
+          cuenta_id,
+          monto,
+          tipo: "deposito",
+          balance: cuenta.saldo,
+        });
+      await cuenta.save();
       await trx.commit();
-
-      // Despues de hacer el commit hago otra transaccion nueva
-      // NO DEJA HACERLO ANTES DEL COMMIT
-      await Transaccion.create({
-        cuenta_id,
-        monto,
-        tipo: "deposito",
-        balance: cuenta.saldo,
-      });
-
     } else {
       await trx.rollback();
-      return {
-        errro: "cuenta no encontrada",
-      };
+      return { errro: "cuenta no encontrada" };
     }
   } catch (error) { // error en la transaccion o timeout
     await trx.rollback();
-
-    return {
-      errro: "error en transaccion",
-    };
-    }
+    return { errro: "error en transaccion" };
+  }
 });
 
+// Ruta para retiro
+// trx se utiliza para identificar la transaccion, siendo necesario
+// para MySQL para poder crear el bloqueo utilizando forUpdate() en los query
 Route.post("/retiro", async (ctx) => {
   const { monto, cuenta_id } = ctx.request.body();
-
-  const trx = await Database.transaction()
+  const trx = await Database.transaction(); // transaccion
 
   try {
-    // Busco el usuario y pongo el lock usando forUpdate()
-    const cuenta = await Database
-      .from('cuentas')
-      .where('id', cuenta_id)
-      .useTransaction(trx)
-      .forUpdate()
-      .first();
-
-    if (cuenta !== null) { // Si existe la cuenta
-      // cuenta en realidad no modifica nada, no se le puede hacer save()
-      // porque fue el resultado de un select con los query que son
-      // distintos a los objetos del modelo de Lucid (Adonis JS ORM)
-      cuenta.saldo = cuenta.saldo - monto;
-
-      // Hago la actualizacion de saldo
-      await Database
-        .from('cuentas')
+    const cuenta = await Cuenta.query({ client: trx })
+        .forUpdate()
         .where('id', cuenta_id)
-        .useTransaction(trx)
-        .update('saldo', cuenta.saldo);
-    
-      // Ejecuto o commit de la transaccion
+        .first();
+    if (cuenta !== null) { // Si existe la cuenta
+      cuenta.saldo = cuenta.saldo - monto;
+      await trx.insertQuery()  // Insert de la transaccion
+        .table('transacciones')
+        .insert({
+          cuenta_id,
+          monto,
+          tipo: "retiro",
+          balance: cuenta.saldo,
+        });
+      await cuenta.save();
       await trx.commit();
-
-      // Despues de hacer el commit hago otra transaccion nueva
-      // NO DEJA HACERLO ANTES DEL COMMIT
-      await Transaccion.create({
-        cuenta_id,
-        monto,
-        tipo: "retiro",
-        balance: cuenta.saldo,
-      });
-
     } else {
       await trx.rollback();
-      return {
-        errro: "cuenta no encontrada",
-      };
+      return { errro: "cuenta no encontrada" };
     }
   } catch (error) { // error en la transaccion o timeout
     await trx.rollback();
-
-    return {
-      errro: "error en transaccion",
-    };
+    return { errro: "error en transaccion" };
   }
 });
