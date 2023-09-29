@@ -24,45 +24,61 @@ import Database from "@ioc:Adonis/Lucid/Database";
 import Cuenta from "App/Models/Cuenta";
 import Transaccion from "App/Models/Transaccion";
 
-
 Route.post("/", async () => {
   return { hello: "world" };
 })
 
 Route.post("/transaccion", async (ctx) => {
   const { monto, cuenta_id_origen, cuenta_id_destino } = ctx.request.body();
+  const trx = await Database.transaction(); // transaccion
 
-  const cuenta_origen = await Cuenta.find(cuenta_id_origen);
-  const cuenta_destino = await Cuenta.find(cuenta_id_destino);
+  try {
+    const cuenta_origen = await Cuenta.query({ client: trx })
+      .forUpdate()
+      .where('id', cuenta_id_origen)
+      .first();
+    
+    const cuenta_destino = await Cuenta.query({ client: trx })
+      .forUpdate()
+      .where('id', cuenta_id_destino)
+      .first();
 
-  if (cuenta_destino !== null && cuenta_origen !== null) {
-    cuenta_origen.saldo = cuenta_origen.saldo - monto;
-    cuenta_destino.saldo = cuenta_destino.saldo + monto;
+    if (cuenta_destino !== null && cuenta_origen !== null) {
+      cuenta_origen.saldo = cuenta_origen.saldo - monto;
+      cuenta_destino.saldo = cuenta_destino.saldo + monto;
+  
+      await trx
+        .insertQuery()  // Insert de la transaccion origen
+        .table('transacciones')
+        .insert({
+          cuenta_id: cuenta_id_origen,
+          monto,
+          tipo: "retiro",
+          balance: cuenta_origen.saldo,
+        });
 
-    await Transaccion.create({
-      cuenta_id: cuenta_id_origen,
-      monto,
-      tipo: "retiro",
-      balance: cuenta_origen.saldo,
-    });
+      await trx
+        .insertQuery()  // Insert de la transaccion destino
+        .table('transacciones')
+        .insert({
+          cuenta_id: cuenta_id_destino,
+          monto,
+          tipo: "deposito",
+          balance: cuenta_destino.saldo,
+        });
 
-    await Transaccion.create({
-      cuenta_id: cuenta_id_destino,
-      monto,
-      tipo: "deposito",
-      balance: cuenta_destino.saldo,
-    });
-
-    await cuenta_origen.save();
-    await cuenta_destino.save();
-
-    return {
-      message: "transaccion realizada",
-    };
-  } else {
-    return {
-      error: "cuentas no encontrada",
-    };
+      await cuenta_origen.save();
+      await cuenta_destino.save();
+      await trx.commit(); // commit de la transaccion
+      return { message: "transaccion realizada" };
+    } else {
+      await trx.rollback();
+      return { error: "cuentas no encontrada" };
+    }
+  } catch (error) {
+    // error en la transaccion o timeout
+    await trx.rollback();
+    return { errro: "error en transaccion" };
   }
 });
 
@@ -102,13 +118,15 @@ Route.post("/deposito", async (ctx) => {
   const trx = await Database.transaction(); // transaccion
 
   try {
-    const cuenta = await Cuenta.query({ client: trx })
-        .forUpdate()
-        .where('id', cuenta_id)
-        .first();
+    const cuenta = await Cuenta
+      .query({ client: trx })
+      .forUpdate()
+      .where('id', cuenta_id)
+      .first();
     if (cuenta !== null) { // Si existe la cuenta
       cuenta.saldo = cuenta.saldo + monto;
-      await trx.insertQuery()  // Insert de la transaccion
+      await trx
+        .insertQuery()  // Insert de la transaccion
         .table('transacciones')
         .insert({
           cuenta_id,
@@ -118,11 +136,13 @@ Route.post("/deposito", async (ctx) => {
         });
       await cuenta.save();
       await trx.commit();
+      return { message: "transaccion realizada" };
     } else {
       await trx.rollback();
       return { errro: "cuenta no encontrada" };
     }
-  } catch (error) { // error en la transaccion o timeout
+  } catch (error) {
+    // error en la transaccion o timeout
     await trx.rollback();
     return { errro: "error en transaccion" };
   }
@@ -152,11 +172,13 @@ Route.post("/retiro", async (ctx) => {
         });
       await cuenta.save();
       await trx.commit();
+      return { message: "transaccion realizada" };
     } else {
       await trx.rollback();
       return { errro: "cuenta no encontrada" };
     }
-  } catch (error) { // error en la transaccion o timeout
+  } catch (error) {
+    // error en la transaccion o timeout
     await trx.rollback();
     return { errro: "error en transaccion" };
   }
