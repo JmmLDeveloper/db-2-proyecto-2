@@ -97,45 +97,107 @@ Route.get("/cuentas/:id", async (ctx) => {
 Route.post("/deposito", async (ctx) => {
   const { monto, cuenta_id } = ctx.request.body();
 
-  const cuenta = await Cuenta.find(cuenta_id);
+  const trx = await Database.transaction()
 
-  if (cuenta !== null) {
-    cuenta.saldo = cuenta.saldo + monto;
+  try {
+    // Busco el usuario y pongo el lock usando forUpdate()
+    const cuenta = await Database
+      .from('cuentas')
+      .where('id', cuenta_id)
+      .useTransaction(trx)
+      .forUpdate()
+      .first();
 
-    await Transaccion.create({
-      cuenta_id,
-      monto,
-      tipo: "deposito",
-      balance: cuenta.saldo,
-    });
+    if (cuenta !== null) { // Si existe la cuenta
+      // cuenta en realidad no modifica nada, no se le puede hacer save()
+      // porque fue el resultado de un select con los query que son
+      // distintos a los objetos del modelo de Lucid (Adonis JS ORM)
+      cuenta.saldo = cuenta.saldo + monto;
 
-    return await cuenta.save();
-  }
+      // Hago la actualizacion de saldo
+      await Database
+        .from('cuentas')
+        .where('id', cuenta_id)
+        .useTransaction(trx)
+        .update('saldo', cuenta.saldo);
+    
+      // Ejecuto o commit de la transaccion
+      await trx.commit();
 
-  return {
-    errro: "cuenta no encontrada",
-  };
+      // Despues de hacer el commit hago otra transaccion nueva
+      // NO DEJA HACERLO ANTES DEL COMMIT
+      await Transaccion.create({
+        cuenta_id,
+        monto,
+        tipo: "deposito",
+        balance: cuenta.saldo,
+      });
+
+    } else {
+      await trx.rollback();
+      return {
+        errro: "cuenta no encontrada",
+      };
+    }
+  } catch (error) { // error en la transaccion o timeout
+    await trx.rollback();
+
+    return {
+      errro: "error en transaccion",
+    };
+    }
 });
 
 Route.post("/retiro", async (ctx) => {
   const { monto, cuenta_id } = ctx.request.body();
 
-  const cuenta = await Cuenta.find(cuenta_id);
+  const trx = await Database.transaction()
 
-  if (cuenta !== null) {
-    cuenta.saldo = cuenta.saldo - monto;
+  try {
+    // Busco el usuario y pongo el lock usando forUpdate()
+    const cuenta = await Database
+      .from('cuentas')
+      .where('id', cuenta_id)
+      .useTransaction(trx)
+      .forUpdate()
+      .first();
 
-    await Transaccion.create({
-      cuenta_id,
-      monto,
-      tipo: "retiro",
-      balance: cuenta.saldo,
-    });
+    if (cuenta !== null) { // Si existe la cuenta
+      // cuenta en realidad no modifica nada, no se le puede hacer save()
+      // porque fue el resultado de un select con los query que son
+      // distintos a los objetos del modelo de Lucid (Adonis JS ORM)
+      cuenta.saldo = cuenta.saldo - monto;
 
-    return await cuenta.save();
+      // Hago la actualizacion de saldo
+      await Database
+        .from('cuentas')
+        .where('id', cuenta_id)
+        .useTransaction(trx)
+        .update('saldo', cuenta.saldo);
+    
+      // Ejecuto o commit de la transaccion
+      await trx.commit();
+
+      // Despues de hacer el commit hago otra transaccion nueva
+      // NO DEJA HACERLO ANTES DEL COMMIT
+      await Transaccion.create({
+        cuenta_id,
+        monto,
+        tipo: "retiro",
+        balance: cuenta.saldo,
+      });
+
+    } else {
+      await trx.rollback();
+      return {
+        errro: "cuenta no encontrada",
+      };
+    }
+  } catch (error) { // error en la transaccion o timeout
+    await trx.rollback();
+
+    return {
+      errro: "error en transaccion",
+    };
   }
-
-  return {
-    errro: "cuenta no encontrada",
-  };
 });
