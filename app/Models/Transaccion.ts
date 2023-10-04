@@ -3,7 +3,6 @@ import { BaseModel, column } from '@ioc:Adonis/Lucid/Orm'
 
 
 export default class Transaccion extends BaseModel {
-
   public static table = 'transacciones'
   
 
@@ -21,10 +20,4 @@ export default class Transaccion extends BaseModel {
 
   @column()
   public balance: number
-
-  @column.dateTime({ autoCreate: true })
-  public createdAt: DateTime
-
-  @column.dateTime({ autoCreate: true, autoUpdate: true })
-  public updatedAt: DateTime
 }

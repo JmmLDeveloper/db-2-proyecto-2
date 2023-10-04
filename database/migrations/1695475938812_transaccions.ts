@@ -10,8 +10,6 @@ export default class extends BaseSchema {
       table.integer('monto')
       table.enum('tipo', ['deposito', 'retiro'])
       table.integer('balance')
-      table.timestamp('created_at')
-      table.timestamp('updated_at')
     })
   }
 

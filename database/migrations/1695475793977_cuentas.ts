@@ -8,8 +8,6 @@ export default class extends BaseSchema {
       table.increments('id')
       table.integer('numero_de_cuenta')
       table.integer('saldo')
-      table.timestamp('created_at')
-      table.timestamp('updated_at')
     })
   }
 

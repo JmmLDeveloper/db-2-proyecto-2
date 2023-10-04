@@ -11,11 +11,4 @@ export default class Cuenta extends BaseModel {
 
   @column()
   public saldo: number
-
-  
-  @column.dateTime({ autoCreate: true })
-  public createdAt: DateTime
-
-  @column.dateTime({ autoCreate: true, autoUpdate: true })
-  public updatedAt: DateTime
 }
