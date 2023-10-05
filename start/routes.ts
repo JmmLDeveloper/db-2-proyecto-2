@@ -9,18 +9,19 @@ Route.post("/transaccion", async (ctx) => {
   const trx = await Database.transaction(); // transaccion
 
   try {
-    const cuenta_origen = await Cuenta.query({ client: trx })
+    var cuentas
+
+    cuentas = await Cuenta.query({ client: trx })
       .forUpdate()
       .where('id', cuenta_id_origen)
-      .first();
-    
-    const cuenta_destino = await Cuenta.query({ client: trx })
-      .forUpdate()
-      .where('id', cuenta_id_destino)
-      .first();
+      .orWhere('id', cuenta_id_destino)
+      .exec();
+
+    // Esta logica esta regular, ademas si alguna cuenta no existe aqui seguramente va a tirar error de servidor (porque va a intentar acceder a una propiedad de un objeto null) y no de cuenta no existente
+    const cuenta_origen = cuentas[0].id == cuenta_id_origen ? cuentas[0] : cuentas[1];
+    const cuenta_destino = cuentas[0].id == cuenta_id_destino ? cuentas[0] : cuentas[1];
 
     if (cuenta_destino !== null && cuenta_origen !== null) {
-
       if ( cuenta_origen.saldo < monto ) {
         // await trx.rollback();
         // return { error: "saldo insuficiente" };
