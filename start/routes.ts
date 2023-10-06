@@ -6,6 +6,12 @@ import Cuenta from "App/Models/Cuenta";
 
 Route.post("/transaccion", async (ctx) => {
   const { monto, cuenta_id_origen, cuenta_id_destino } = ctx.request.body();
+  
+  if (cuenta_id_origen == cuenta_id_destino) {
+    ctx.response.status(400);
+    return { error: "no se puede transferir a la misma cuenta" };
+  }
+
   const trx = await Database.transaction(); // transaccion
 
   try {
@@ -17,14 +23,23 @@ Route.post("/transaccion", async (ctx) => {
       .orWhere('id', cuenta_id_destino)
       .exec();
 
-    // Esta logica esta regular, ademas si alguna cuenta no existe aqui seguramente va a tirar error de servidor (porque va a intentar acceder a una propiedad de un objeto null) y no de cuenta no existente
-    const cuenta_origen = cuentas[0].id == cuenta_id_origen ? cuentas[0] : cuentas[1];
-    const cuenta_destino = cuentas[0].id == cuenta_id_destino ? cuentas[0] : cuentas[1];
+    // Si no se encontraron las cuentas
+    if (cuentas.length < 2) {
+      await trx.rollback();
+      ctx.response.status(400)
+      return { error: "cuentas no encontradas" };
+    }
+
+    // Selecciona las cuentas
+    const cuenta_origen = 
+      cuentas[0].id == cuenta_id_origen ? cuentas[0] : cuentas[1];
+    const cuenta_destino = 
+      cuentas[0].id == cuenta_id_destino ? cuentas[0] : cuentas[1];
 
     if (cuenta_destino !== null && cuenta_origen !== null) {
       if ( cuenta_origen.saldo < monto ) {
-        // await trx.rollback();
-        // return { error: "saldo insuficiente" };
+        await trx.rollback();
+        return { error: "saldo insuficiente" };
       }
 
       cuenta_origen.saldo = cuenta_origen.saldo - monto;
